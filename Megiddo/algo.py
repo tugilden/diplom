@@ -365,9 +365,8 @@ def rotate_and_solve(constraints, p, q):
 
 
 def solve_megiddo(constraints, p, q):
-    """Основная функция решения."""
-    # Используем простой симплекс для надёжности
-    return solve_simplex(constraints, p, q)
+    """Основная функция решения - алгоритм Мегиддо."""
+    return rotate_and_solve(constraints, p, q)
 
 
 def read_input(filename):
@@ -386,50 +385,48 @@ def read_input(filename):
 
 def main():
     import sys
+    import time
     
     if len(sys.argv) < 2:
-        print("Использование: python algo.py <файл>")
+        print("Использование: python algo.py <файл> [simplex|megiddo]")
         sys.exit(1)
     
     filename = sys.argv[1]
     p, q, constraints = read_input(filename)
     
-    print(f"\nЗадача: max {p}*x + {q}*y")
-    print(f"при {len(constraints)} ограничениях:")
-    for i, (a, b, c) in enumerate(constraints, 1):
-        print(f"  {i}: {a}*x + {b}*y <= {c}")
+    # Выбор алгоритма: по умолчанию Мегиддо, или simplex если указано
+    method = sys.argv[2].lower() if len(sys.argv) > 2 else 'megiddo'
     
-    x, y, value, status = solve_megiddo(constraints, p, q)
+    # Замер времени выполнения
+    start_time = time.perf_counter()
     
-    print("\n" + "=" * 60)
-    print("РЕЗУЛЬТАТ")
-    print("=" * 60)
+    if method == 'simplex':
+        x, y, value, status = solve_simplex(constraints, p, q)
+        method_name = "Симплекс"
+    else:
+        x, y, value, status = rotate_and_solve(constraints, p, q)
+        method_name = "Мегиддо"
+    
+    end_time = time.perf_counter()
+    elapsed_time = (end_time - start_time) * 1000  # миллисекунды
     
     if status == 'optimal':
-        print(f"Статус: OPTIMAL")
+        print(f"Метод: {method_name}")
         print(f"x = {x:.6f}")
         print(f"y = {y:.6f}")
-        print(f"Максимум = {value:.6f}")
-        
-        # Проверка
-        print("\nПроверка ограничений:")
-        all_ok = True
-        for i, (a, b, c) in enumerate(constraints, 1):
-            val = a * x + b * y
-            ok = val <= c + EPS
-            all_ok = all_ok and ok
-            print(f"  {i}: {a}*{x:.4f} + {b}*{y:.4f} = {val:.6f} <= {c} {'✓' if ok else '✗'}")
-        
-        if not all_ok:
-            print("\nВНИМАНИЕ: некоторые ограничения нарушены!")
+        print(f"max = {value:.6f}")
+        print(f"Время выполнения: {elapsed_time:.3f} мс")
     elif status == 'infeasible':
         print("Статус: INFEASIBLE")
         print("Нет допустимых решений")
+        print(f"Время выполнения: {elapsed_time:.3f} мс")
     elif status == 'unbounded':
         print("Статус: UNBOUNDED")
         print("Задача неограничена")
+        print(f"Время выполнения: {elapsed_time:.3f} мс")
     else:
         print(f"Статус: {status}")
+        print(f"Время выполнения: {elapsed_time:.3f} мс")
 
 
 if __name__ == "__main__":
