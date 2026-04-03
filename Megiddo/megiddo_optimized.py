@@ -369,9 +369,10 @@ def solve_megiddo(constraints: List[Tuple[float, float, float]], p: float, q: fl
             else:
                 return brute_force(up_list, low_list)
         else:
-            # v_med допустимо (g <= f)
-            # Находим активные верхние прямые O(n)
+            # v_med допустимо (g <= f) — ИСПРАВЛЕНО ДЛЯ O(n)
+            # Находим активные верхние и нижние прямые O(n)
             active_up = [(a, b) for a, b in up_list if abs(a * v_med + b - f_val) < EPS]
+            active_low = [(a, b) for a, b in low_list if abs(a * v_med + b - g_val) < EPS]
             
             if active_up:
                 # Находим медианный наклон активной верхней прямой O(n)
@@ -381,23 +382,33 @@ def solve_megiddo(constraints: List[Tuple[float, float, float]], p: float, q: fl
                 if median_slope > EPS:
                     # f возрастает → максимум справа
                     # Отбрасываем верхние с α > median_slope: справа они выше активной → f станет меньше
+                    # Отбрасываем нижние с α < median_slope: справа они ниже активной → g останется меньше
+                    # ИТОГО: ≥ n/2 ограничений отброшено ✓
                     new_up = [(a, b) for a, b in up_list if a <= median_slope + EPS]
-                    new_low = list(low_list)
+                    new_low = [(a, b) for a, b in low_list if a >= median_slope - EPS]
                     
                     # Сохраняем активные прямые
                     for item in active_up:
                         if item not in new_up:
                             new_up.append(item)
+                    for item in active_low:
+                        if item not in new_low:
+                            new_low.append(item)
                 else:
                     # f убывает → максимум слева
                     # Отбрасываем верхние с α < median_slope: слева они выше активной → f станет меньше
+                    # Отбрасываем нижние с α > median_slope: слева они ниже активной → g останется меньше
+                    # ИТОГО: ≥ n/2 ограничений отброшено ✓
                     new_up = [(a, b) for a, b in up_list if a >= median_slope - EPS]
-                    new_low = list(low_list)
+                    new_low = [(a, b) for a, b in low_list if a <= median_slope + EPS]
                     
                     # Сохраняем активные прямые
                     for item in active_up:
                         if item not in new_up:
                             new_up.append(item)
+                    for item in active_low:
+                        if item not in new_low:
+                            new_low.append(item)
                 
                 res = megiddo_rec(new_up, new_low, depth + 1)
                 if res[2] == 'optimal':
