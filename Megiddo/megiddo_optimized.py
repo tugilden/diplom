@@ -157,7 +157,7 @@ def solve_simplex(constraints: List[Tuple[float, float, float]], p: float, q: fl
     return (best_x, best_y, best_val, 'optimal') if best_x is not None else (None, None, None, 'infeasible')
 
 
-def solve_megiddo(constraints: List[Tuple[float, float, float]], p: float, q: float) -> Tuple[Optional[float], Optional[float], Optional[float], str]:
+def solve_megiddo(constraints: List[Tuple[float, float, float]], p: float, q: float) -> Tuple[Optional[float], Optional[float], Optional[float], str, List[Tuple[float, float, float]]]:
     """
     Алгоритм Мегиддо для 2D LP с линейной сложностью O(n).
     
@@ -421,14 +421,41 @@ def solve_megiddo(constraints: List[Tuple[float, float, float]], p: float, q: fl
     v_opt, u_opt, status = megiddo_rec(upper, lower)
     
     if status != 'optimal':
-        return (None, None, None, status)
+        return (None, None, None, status, [])
     if v_opt is None or u_opt is None:
-        return (None, None, None, 'unbounded' if u_opt == -INF else 'infeasible')
+        return (None, None, None, 'unbounded' if u_opt == -INF else 'infeasible', [])
     
     # Обратное преобразование
     x = (p * u_opt - q * v_opt) / L
     y = (q * u_opt + p * v_opt) / L
-    return (x, y, p * x + q * y, 'optimal')
+    
+    # Найти два ограничения, которые дают точку пересечения
+    intersecting_constraints = []
+    
+    # Для каждой пары ограничений проверяем, пересекаются ли они в точке (x,y)
+    for i in range(len(constraints)):
+        a1, b1, c1 = constraints[i]
+        # Проверяем, удовлетворяет ли точка ограничению (включая равенство)
+        if abs(a1 * x + b1 * y - c1) <= EPS:
+            intersecting_constraints.append((a1, b1, c1))
+            if len(intersecting_constraints) == 2:
+                break
+    
+    # Если не нашли точное пересечение, используем поиск ближайших
+    if len(intersecting_constraints) < 2:
+        # Простой подход: найти два ограничения, которые ближе всего к точке
+        # Или найти те, которые действительно пересекаются в точке (прямые)
+        # Проверяем точное пересечение для всех ограничений
+        for i in range(len(constraints)):
+            a1, b1, c1 = constraints[i]
+            # Для точного пересечения нужно найти, что точка удовлетворяет равенству
+            # но с учетом погрешности округления
+            if abs(a1 * x + b1 * y - c1) <= EPS:
+                intersecting_constraints.append((a1, b1, c1))
+                if len(intersecting_constraints) == 2:
+                    break
+    
+    return (x, y, p * x + q * y, 'optimal', intersecting_constraints)
 
 
 def read_input(filename: str) -> Tuple[float, float, List[Tuple[float, float, float]]]:
@@ -557,7 +584,7 @@ def main():
         print(f"  {i}: {a}*x + {b}*y <= {c}")
     
     start_time = time.perf_counter()
-    x, y, val, status = solve_megiddo(constraints, p, q)
+    x, y, val, status, intersecting_constraints = solve_megiddo(constraints, p, q)
     elapsed_time = (time.perf_counter() - start_time) * 1000
     
     if status == 'optimal':
@@ -565,6 +592,13 @@ def main():
         print(f"Время выполнения: {elapsed_time:.4f} мс")
         print(f"Число ограничений: {len(constraints)}")
         print(f"Операций (прибл.): {len(constraints) * 20:.0f}")
+        
+        # Вывод неравенств, дающих точку пересечения
+        if intersecting_constraints:
+            print("\nНеравенства, дающие точку пересечения:")
+            for i, (a, b, c) in enumerate(intersecting_constraints, 1):
+                print(f"  {i}: {a}*x + {b}*y = {c}")
+        
         print("\nПроверка ограничений:")
         for i, (a, b, c) in enumerate(constraints, 1):
             v = a * x + b * y
