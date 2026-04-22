@@ -10,6 +10,7 @@
 
 import sys
 import os
+import numpy as np
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from megiddo_optimized import solve_megiddo, read_input
@@ -79,6 +80,41 @@ def main():
         print(P.T)
         print("\nПерспективные направления (H):")
         print(H)
+        
+        # Преобразование вершин обратно в исходную систему координат
+        print("\n" + "="*80)
+        print("ПРЕОБРАЗОВАНИЕ ВЕРШИН В ИСХОДНУЮ СИСТЕМУ КООРДИНАТ")
+        print("="*80)
+        
+        # Преобразуем вершины полученные AngleHull (P.T)
+        # P.T имеет форму (n, 2) где n - количество вершин
+        P_transposed = P.T
+        print(f"Вершины AngleHull в преобразованной системе (P.T):")
+        print(P_transposed)
+        
+        T_lst = [np.array([P_transposed[i, 0], P_transposed[i, 1]]) for i in range(P_transposed.rows)]
+        
+        # Добавляем корректировку по y-координате
+        T_fin_lst = [identity_matrix.dot(np.array([vec[0], vec[1] - int(C2 // abs(beta2))])) for vec in T_lst]
+        
+        print(f"\nВершины в преобразованной системе (T_lst):")
+        for i, vec in enumerate(T_lst):
+            print(f"  T_lst[{i}] = {vec}")
+        
+        print(f"\nВершины в исходной системе (T_fin_lst):")
+        for i, vec in enumerate(T_fin_lst):
+            print(f"  T_fin_lst[{i}] = ({int(vec[0])}, {int(vec[1])})")
+        
+        # Вывод в виде точек (X, Y)
+        print(f"\nТочки в исходной системе координат:")
+        for vec in T_fin_lst:
+            print(f"  (X={int(vec[0])}, Y={int(vec[1])})")
+        
+        # Вывод в виде матрицы
+        T_fin_matrix = np.column_stack(T_fin_lst) if T_fin_lst else np.array([])
+        if T_fin_matrix.size > 0:
+            print(f"\nМатрица вершин в исходной системе:")
+            print(T_fin_matrix)
         
         print("\n" + "="*80)
         print("ГОТОВО")
