@@ -345,7 +345,7 @@ def visualize_megiddo_solution(filename=None):
                 ]),
                 direction="down",
                 showactive=True,
-                x=0.02,
+                x=0.78,
                 xanchor="left",
                 y=1.15,
                 yanchor="top"
