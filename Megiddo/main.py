@@ -11,6 +11,7 @@
 import sys
 import os
 import numpy as np
+import math
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from megiddo_optimized import solve_megiddo, read_input
@@ -119,6 +120,103 @@ def main():
         print("\n" + "="*80)
         print("ГОТОВО")
         print("="*80)
+        
+        # ================================================================
+        # НОВАЯ ФУНКЦИОНАЛЬНОСТЬ: ПРОВЕРКА ЦЕЛОЧИСЛЕННЫХ ТОЧЕК АЛГОРИТМА
+        # ================================================================
+        print("\n" + "="*80)
+        print("ПРОВЕРКА ЦЕЛОЧИСЛЕННЫХ ТОЧЕК, НАЙДЕННЫХ АЛГОРИТМОМ")
+        print("="*80)
+        
+        # Используем целые точки, найденные ранее алгоритмом (T_fin_lst)
+        print(f"\nИспользуем {len(T_fin_lst)} целых точек, найденных методом AngleHull")
+        
+        # Проверка каждой точки на принадлежность исходной области
+        feasible_integer_points = []
+        for i, vec in enumerate(T_fin_lst):
+            ix, iy = int(vec[0]), int(vec[1])
+            
+            # Проверяем все ограничения
+            is_feasible = True
+            violated_constraints = []
+            for j, (a, b, c) in enumerate(constraints):
+                value = a * ix + b * iy
+                if value > c + 1e-6:  # С учетом погрешности
+                    is_feasible = False
+                    violated_constraints.append((j, a, b, c, value))
+            
+            # Вычисляем значение целевой функции (даже для недопустимых точек)
+            obj_value = p * ix + q * iy
+            feasible_integer_points.append((ix, iy, obj_value, is_feasible, violated_constraints))
+        
+        # Выводим информацию о всех точках
+        print(f"\n--- ПРОВЕРКА ВСЕХ ТОЧЕК АЛГОРИТМА ---")
+        for i, (px, py, pv, is_feas, violations) in enumerate(feasible_integer_points):
+            status = "✓ ДОПУСТИМА" if is_feas else "✗ НЕДОПУСТИМА"
+            print(f"  Точка {i+1}: ({px}, {py}) -> f(x,y) = {pv:.4f} [{status}]")
+            if violations:
+                print(f"    Нарушенные ограничения: {len(violations)}")
+                for v in violations:
+                    idx, a, b, c, val = v
+                    print(f"      #{idx}: {a}*{px} + {b}*{py} = {val:.2f} > {c}")
+        
+        # Фильтруем только допустимые точки
+        valid_points = [(px, py, pv, vi) for px, py, pv, is_feas, vi in feasible_integer_points if is_feas]
+        
+        print(f"\nДопустимых точек: {len(valid_points)}/{len(feasible_integer_points)}")
+        
+        if valid_points:
+            # Сортируем допустимые точки по значению целевой функции (убывание)
+            valid_points.sort(key=lambda pt: pt[2], reverse=True)
+            
+            # Находим максимальное значение
+            max_point = valid_points[0]
+            max_value = max_point[2]
+            max_x, max_y = max_point[0], max_point[1]
+            
+            print(f"\n{'='*80}")
+            print("РЕЗУЛЬТАТЫ ПРОВЕРКИ ЦЕЛОЧИСЛЕННЫХ ТОЧЕК АЛГОРИТМА")
+            print(f"{'='*80}")
+            
+            print(f"\n--- ВСЕ ДОПУСТИМЫЕ ТОЧКИ (по значению целевой функции) ---")
+            for i, (px, py, pv, violations) in enumerate(valid_points):
+                print(f"  {i+1}. ({px}, {py}): f(x,y) = {pv:.4f}")
+            
+            print(f"\n{'='*60}")
+            print("★ ЛУЧШЕЕ ЦЕЛОЧИСЛЕННОЕ РЕШЕНИЕ (из точек алгоритма) ★")
+            print(f"{'='*60}")
+            print(f"  x* = {max_x}")
+            print(f"  y* = {max_y}")
+            print(f"  f(x*, y*) = {max_value:.4f}")
+            
+            # Сравнение с вещественным оптимумом
+            print(f"\n--- СРАВНЕНИЕ С ВЕЩЕСТВЕННЫМ ОПТИМУМОМ ---")
+            print(f"  Вещественный оптимум:  ({x:.4f}, {y:.4f}) -> f = {val:.4f}")
+            print(f"  Целочисленное реш.:   ({max_x}, {max_y}) -> f = {max_value:.4f}")
+            
+            if val > 0:
+                gap = (val - max_value) / val * 100
+            else:
+                gap = 0
+            print(f"  Потеря (gap): {gap:.2f}%")
+            
+            # Проверка каких ограничений удовлетворяет лучшее целочисленное решение
+            print(f"\n--- ПРОВЕРКА ЛУЧШЕГО ЦЕЛОЧИСЛЕННОГО РЕШЕНИЯ ({max_x}, {max_y}) ---")
+            satisfied = 0
+            for i, (a, b, c) in enumerate(constraints):
+                value = a * max_x + b * max_y
+                status = "✓" if value <= c + 1e-6 else "✗"
+                if value <= c + 1e-6:
+                    satisfied += 1
+                print(f"  {i+1}: {value:10.4f} <= {c:10.4f} {status}")
+            print(f"\n  Удовлетворено: {satisfied}/{len(constraints)} ограничений")
+            
+            print(f"\n{'='*80}")
+            print("ГОТОВО - ЛУЧШЕЕ ЦЕЛОЧИСЛЕННОЕ РЕШЕНИЕ ИЗ ТОЧЕК АЛГОРИТМА")
+            print(f"{'='*80}")
+        else:
+            print("\n⚠ Ни одна точка алгоритма не попала в область допустимых решений!")
+    
     else:
         print("Не удалось определить ограничения, дающие точку пересечения")
         return

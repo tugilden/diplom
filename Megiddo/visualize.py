@@ -61,6 +61,28 @@ def create_all_lines_mode1(constraints, active_indices, x_vals):
     return traces
 
 
+def create_all_lines_initial(constraints, x_vals):
+    """Создает все прямые для начального пустого вида — все скрыты."""
+    traces = []
+    for i, (A, B, C) in enumerate(constraints):
+        if abs(B) > 1e-9:
+            y_vals = (C - A * x_vals) / B
+        else:
+            continue
+        
+        hover_text = format_inequality_text(A, B, C)
+        
+        trace = go.Scatter(
+            x=x_vals, y=y_vals, mode='lines',
+            name=f'Прямая {i+1}',
+            line=dict(color='lightblue', width=1.5),
+            hoverinfo='text', hovertext=hover_text,
+            showlegend=False, visible=False
+        )
+        traces.append(trace)
+    return traces
+
+
 def create_all_lines_mode3(constraints, x_vals):
     """Создает все прямые для режима 3: все голубым."""
     traces = []
@@ -137,9 +159,89 @@ def create_integer_points(x_coords, y_coords, color='red', symbol='circle', size
     )
 
 
+def check_integer_solutions_feasibility(points_x, points_y, constraints, p, q):
+    """
+    Проверяет, попадают ли целые точки в исходную область допустимых решений.
+    Вычисляет значения целевой функции для допустимых точек и возвращает лучшее решение.
+    
+    Args:
+        points_x: список целых x-координат
+        points_y: список целых y-координат
+        constraints: список ограничений (A, B, C)
+        p, q: коэффициенты целевой функции
+        
+    Returns:
+        кортеж (valid_points, best_point, all_evaluations)
+        - valid_points: список допустимых точек с значениями функции
+        - best_point: лучшая точка с максимальным значением
+        - all_evaluations: все оценки для отображения
+    """
+    if not points_x or not points_y:
+        return [], None, []
+    
+    valid_points = []
+    all_evaluations = []
+    
+    for i, (x_val, y_val) in enumerate(zip(points_x, points_y)):
+        # Проверяем все ограничения
+        is_feasible = True
+        violated = []
+        
+        for idx, (A, B, C) in enumerate(constraints):
+            lhs = A * x_val + B * y_val
+            if lhs > C + 1e-6:  # Нарушение ограничения
+                is_feasible = False
+                violated.append((idx, lhs, C))
+        
+        # Вычисляем значение целевой функции
+        obj_value = p * x_val + q * y_val
+        
+        all_evaluations.append({
+            'point': (x_val, y_val),
+            'feasible': is_feasible,
+            'obj_value': obj_value,
+            'violated': violated
+        })
+        
+        if is_feasible:
+            valid_points.append((x_val, y_val, obj_value))
+    
+    # Находим лучшее решение (максимальное значение)
+    best_point = None
+    if valid_points:
+        best_point = max(valid_points, key=lambda pt: pt[2])
+    
+    return valid_points, best_point, all_evaluations
+
+
+def create_best_point_marker(x, y, obj_value, size=18):
+    """Создает выделенный маркер для лучшего целочисленного решения."""
+    return go.Scatter(
+        x=[x], y=[y], mode='markers+text',
+        name='Лучшее целочисленное решение',
+        marker=dict(
+            size=size,
+            color='yellow',
+            symbol='circle',
+            line=dict(width=3, color='orange')
+        ),
+        text=[f'({x}, {y})\nf={obj_value:.2f}'],
+        textposition='top center',
+        textfont=dict(size=13, color='orange', family='Arial', weight='bold'),
+        hoverinfo='text',
+        hovertext=f'Лучшее решение: ({x}, {y}), f={obj_value:.2f}',
+        showlegend=True, zorder=15, visible=False
+    )
+
+
 def visualize_megiddo_solution(filename=None):
     """
     Визуализирует решение задачи Мегиддо с одним графиком и кнопками переключения.
+    4 режима отображения:
+    1) Все неравенства голубым + активные (дающие решение) синим
+    2) Только активные неравенства + целочисленные решения (зеленые точки)
+    3) Все неравенства голубым + целочисленные решения (красные точки)
+    4) Все неравенства голубым + ЛУЧШЕЕ целочисленное решение (золотая звезда)
     """
     if filename is None:
         filename = os.path.join(os.path.dirname(__file__), "input2.txt")
@@ -172,6 +274,7 @@ def visualize_megiddo_solution(filename=None):
     # Целочисленные решения
     integer_points_x = []
     integer_points_y = []
+    best_point_coords = None  # (bx, by) - лучшая точка
     
     if active_indices and len(active_indices) >= 2:
         A1, B1, C1 = constraints[active_indices[0]]
@@ -192,8 +295,93 @@ def visualize_megiddo_solution(filename=None):
         print(f"\nЦелочисленные решения (AngleHull): {len(T_fin_lst)} точек")
         for i, vec in enumerate(T_fin_lst):
             print(f"  ({int(vec[0])}, {int(vec[1])})")
+        
+        # Находим лучшую точку (максимальное значение среди допустимых)
+        best_val = -float('inf')
+        for i, (px, py) in enumerate(zip(integer_points_x, integer_points_y)):
+            # Проверяем допустимость
+            is_feasible = True
+            for j, (a_c, b_c, c_c) in enumerate(constraints):
+                if a_c * px + b_c * py > c_c + 1e-6:
+                    is_feasible = False
+                    break
+            if is_feasible:
+                obj_v = p * px + q * py
+                if obj_v > best_val:
+                    best_val = obj_v
+                    best_point_coords = (px, py)
+        
+        if best_point_coords:
+            print(f"\nЛУЧШАЯ ЦЕЛОЧИСЛЕННАЯ ТОЧКА: {best_point_coords} (f={best_val:.2f})")
     
     has_integer_points = len(integer_points_x) > 0
+    
+    # ========================================================================
+    # ПРОВЕРКА ЦЕЛОЧИСЛЕННЫХ ТОЧЕК НА ПРИНАДЛЕЖНОСТЬ ИСХОДНОЙ ОБЛАСТИ
+    # ========================================================================
+    print(f"\n{'='*70}")
+    print("ПРОВЕРКА ЦЕЛОЧИСЛЕННЫХ ТОЧЕК НА ПРИНАДЛЕЖНОСТЬ ОБЛАСТИ")
+    print(f"{'='*70}")
+    
+    # Проверяем все целые точки на попадание в исходную область
+    valid_points, best_point, all_evaluations = check_integer_solutions_feasibility(
+        integer_points_x, integer_points_y, constraints, p, q
+    )
+    
+    # Выводим информацию о каждой точке
+    print(f"\nВсего точек найдено алгоритмом: {len(integer_points_x)}")
+    print(f"Допустимых точек (в области): {len(valid_points)}")
+    
+    print(f"\n--- Детальная проверка каждой точки ---")
+    for eval_data in all_evaluations:
+        px, py = eval_data['point']
+        obj_val = eval_data['obj_value']
+        is_feas = eval_data['feasible']
+        violations = eval_data['violated']
+        
+        status_icon = "✓" if is_feas else "✗"
+        status_text = "ДОПУСТИМА" if is_feas else "НЕДОПУСТИМА"
+        
+        print(f"  Точка ({px}, {py}): f(x,y) = {obj_val:.2f} [{status_icon} {status_text}]")
+        
+        if violations:
+            print(f"    Нарушенные ограничения:")
+            for idx, lhs, rhs in violations:
+                print(f"      #{idx+1}: {lhs:.2f} > {rhs:.2f}")
+    
+    # Информация о лучшем решении
+    if best_point:
+        bx, by, bval = best_point
+        print(f"\n{'='*60}")
+        print("★ ЛУЧШЕЕ ЦЕЛОЧИСЛЕННОЕ РЕШЕНИЕ ★")
+        print(f"{'='*60}")
+        print(f"  x* = {bx}")
+        print(f"  y* = {by}")
+        print(f"  f(x*, y*) = {bval:.2f}")
+        print(f"\n  Сравнение с вещественным оптимумом:")
+        print(f"    Вещественный: f = {val:.2f}")
+        print(f"    Целочисленное: f = {bval:.2f}")
+        if val > 0:
+            gap = ((val - bval) / val) * 100
+        else:
+            gap = 0
+        print(f"    Потеря (gap): {gap:.2f}%")
+        
+        # Показываем все допустимые точки с их значениями
+        print(f"\n--- Все допустимые точки (сортировка по значению f) ---")
+        sorted_valid = sorted(valid_points, key=lambda pt: pt[2], reverse=True)
+        for i, (vx, vy, vval) in enumerate(sorted_valid):
+            marker = " ★" if (vx, vy, vval) == best_point else ""
+            print(f"  {i+1}. ({vx}, {vy}): f = {vval:.2f}{marker}")
+    else:
+        print(f"\n⚠ Ни одна точка не попала в область допустимых решений!")
+    
+    # Флаг для использования лучшего решения в визуализации
+    has_best_point = best_point is not None
+    if has_best_point:
+        best_x, best_y, best_val = best_point
+    else:
+        best_x, best_y, best_val = 0, 0, 0
     
     # Границы графика
     all_intersections = []
@@ -235,10 +423,17 @@ def visualize_megiddo_solution(filename=None):
     m3_lines = create_all_lines_mode3(constraints, x_vals)
     m3_integer = create_integer_points(integer_points_x, integer_points_y, color='red', size=16)
     
+    # Режим 4: все прямые (голубым) + ЛУЧШЕЕ целочисленное решение (золотая звезда)
+    m4_lines = create_all_lines_mode3(constraints, x_vals)
+    m4_best = None
+    if best_point_coords:
+        bx, by = best_point_coords
+        m4_best = create_best_point_marker(bx, by, best_val)
+    
     # ========================================================================
     # СОБИРАЕМ ВСЕ ТРЕЙСЫ В ОДИН СПИСОК
     # ========================================================================
-    # Порядок: m1_lines + m1_solution + m2_lines + m2_solution + m2_integer + m3_lines + m3_integer
+    # Порядок: m1_lines + m1_solution + m2_lines + m2_solution + m2_integer + m3_lines + m3_integer + m4_lines + m4_best
     
     all_traces = []
     
@@ -267,6 +462,15 @@ def visualize_megiddo_solution(filename=None):
     if m3_integer:
         m3_integer_idx = len(all_traces)
         all_traces.append(m3_integer)
+    
+    # Индексы для режима 4
+    m4_lines_start = len(all_traces)
+    m4_lines_actual = len(m4_lines)
+    all_traces.extend(m4_lines)
+    m4_best_idx = None
+    if m4_best:
+        m4_best_idx = len(all_traces)
+        all_traces.append(m4_best)
     
     n_total = len(all_traces)
     
@@ -298,6 +502,13 @@ def visualize_megiddo_solution(filename=None):
         vis_mode3[m3_lines_start + i] = True
     if m3_integer_idx is not None:
         vis_mode3[m3_integer_idx] = True
+    
+    # Режим 4: m4_lines + m4_best
+    vis_mode4 = [False] * n_total
+    for i in range(m4_lines_actual):
+        vis_mode4[m4_lines_start + i] = True
+    if m4_best_idx is not None:
+        vis_mode4[m4_best_idx] = True
     
     # ========================================================================
     # СОЗДАЕМ ГРАФИК
@@ -340,6 +551,15 @@ def visualize_megiddo_solution(filename=None):
                             {"visible": vis_mode3},
                             {"title": f"Режим 3: Все неравенства + целочисленные решения (красные)<br>"
                                       f"Всего: {n_constraints} | Целочисленных: {len(integer_points_x)}"}
+                        ]
+                    ),
+                    dict(
+                        label="Режим 4: ЛУЧШЕЕ решение (★ звезда)",
+                        method="update",
+                        args=[
+                            {"visible": vis_mode4},
+                            {"title": f"Режим 4: Все неравенства + ЛУЧШЕЕ целочисленное решение (★ золотая звезда)<br>"
+                                      f"Всего: {n_constraints} | Лучшее: {best_point_coords if best_point_coords else 'N/A'}"}
                         ]
                     ),
                 ]),
