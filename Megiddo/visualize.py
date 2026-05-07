@@ -1,5 +1,3 @@
-
-
 import numpy as np
 import plotly.graph_objects as go
 import os
@@ -26,15 +24,34 @@ def format_inequality_text(A, B, C):
     return f"{A_str}x + {abs(B):.1f}y ≤ {C_str}"
 
 
-def create_all_lines_mode1(constraints, active_indices, x_vals):
+def create_line_trace(A, B, C, x_vals, y_min_plot, y_max_plot, name, color, width, hover_text, visible=False):
+    """Создает трейс для прямой: обычную или вертикальную."""
+    # Вертикальная линия (B ≈ 0): x = C/A
+    if abs(B) < 1e-9:
+        x_const = C / A if abs(A) > 1e-9 else 0
+        trace = go.Scatter(
+            x=[x_const, x_const], y=[y_min_plot, y_max_plot], mode='lines',
+            name=name,
+            line=dict(color=color, width=width),
+            hoverinfo='text', hovertext=hover_text,
+            showlegend=False, visible=visible
+        )
+    else:
+        y_vals = (C - A * x_vals) / B
+        trace = go.Scatter(
+            x=x_vals, y=y_vals, mode='lines',
+            name=name,
+            line=dict(color=color, width=width),
+            hoverinfo='text', hovertext=hover_text,
+            showlegend=False, visible=visible
+        )
+    return trace
+
+
+def create_all_lines_mode1(constraints, active_indices, x_vals, y_min_plot, y_max_plot):
     """Создает все прямые для режима 1: активные синим, остальные голубым."""
     traces = []
     for i, (A, B, C) in enumerate(constraints):
-        if abs(B) > 1e-9:
-            y_vals = (C - A * x_vals) / B
-        else:
-            continue
-        
         is_active = i in active_indices
         color = 'blue' if is_active else 'lightblue'
         width = 3 if is_active else 1.5
@@ -43,82 +60,35 @@ def create_all_lines_mode1(constraints, active_indices, x_vals):
         if is_active:
             hover_text += " (активное)"
         
-        trace = go.Scatter(
-            x=x_vals, y=y_vals, mode='lines',
-            name=f'Прямая {i+1}',
-            line=dict(color=color, width=width),
-            hoverinfo='text', hovertext=hover_text,
-            showlegend=False, visible=False
-        )
+        trace = create_line_trace(A, B, C, x_vals, y_min_plot, y_max_plot,
+                                  f'Прямая {i+1}', color, width, hover_text, visible=False)
         traces.append(trace)
     return traces
 
 
-def create_all_lines_initial(constraints, x_vals):
-    """Создает все прямые для начального пустого вида — все скрыты."""
-    traces = []
-    for i, (A, B, C) in enumerate(constraints):
-        if abs(B) > 1e-9:
-            y_vals = (C - A * x_vals) / B
-        else:
-            continue
-        
-        hover_text = format_inequality_text(A, B, C)
-        
-        trace = go.Scatter(
-            x=x_vals, y=y_vals, mode='lines',
-            name=f'Прямая {i+1}',
-            line=dict(color='lightblue', width=1.5),
-            hoverinfo='text', hovertext=hover_text,
-            showlegend=False, visible=False
-        )
-        traces.append(trace)
-    return traces
-
-
-def create_all_lines_mode3(constraints, x_vals):
+def create_all_lines_mode3(constraints, x_vals, y_min_plot, y_max_plot):
     """Создает все прямые для режима 3: все голубым."""
     traces = []
     for i, (A, B, C) in enumerate(constraints):
-        if abs(B) > 1e-9:
-            y_vals = (C - A * x_vals) / B
-        else:
-            continue
-        
         hover_text = format_inequality_text(A, B, C)
         
-        trace = go.Scatter(
-            x=x_vals, y=y_vals, mode='lines',
-            name=f'Прямая {i+1}',
-            line=dict(color='lightblue', width=1.5),
-            hoverinfo='text', hovertext=hover_text,
-            showlegend=False, visible=False
-        )
+        trace = create_line_trace(A, B, C, x_vals, y_min_plot, y_max_plot,
+                                  f'Прямая {i+1}', 'lightblue', 1.5, hover_text, visible=False)
         traces.append(trace)
     return traces
 
 
-def create_active_lines_mode2(constraints, active_indices, x_vals):
+def create_active_lines_mode2(constraints, active_indices, x_vals, y_min_plot, y_max_plot):
     """Создает только активные прямые для режима 2."""
     traces = []
     for i, (A, B, C) in enumerate(constraints):
-        if abs(B) > 1e-9:
-            y_vals = (C - A * x_vals) / B
-        else:
-            continue
-        
         if i not in active_indices:
             continue
         
         hover_text = format_inequality_text(A, B, C) + " (активное)"
         
-        trace = go.Scatter(
-            x=x_vals, y=y_vals, mode='lines',
-            name=f'Активное {i+1}',
-            line=dict(color='blue', width=3),
-            hoverinfo='text', hovertext=hover_text,
-            showlegend=False, visible=False
-        )
+        trace = create_line_trace(A, B, C, x_vals, y_min_plot, y_max_plot,
+                                  f'Активное {i+1}', 'blue', 3, hover_text, visible=False)
         traces.append(trace)
     return traces
 
@@ -332,7 +302,7 @@ def visualize_megiddo_solution(filename=None):
         is_feas = eval_data['feasible']
         violations = eval_data['violated']
         
-        status_icon = "✓" if is_feas else "✗"
+        status_icon = "+" if is_feas else "x"
         status_text = "ДОПУСТИМА" if is_feas else "НЕДОПУСТИМА"
         
         print(f"  Точка ({px}, {py}): f(x,y) = {obj_val:.2f} [{status_icon} {status_text}]")
@@ -346,7 +316,7 @@ def visualize_megiddo_solution(filename=None):
     if best_point:
         bx, by, bval = best_point
         print(f"\n{'='*60}")
-        print("★ ЛУЧШЕЕ ЦЕЛОЧИСЛЕННОЕ РЕШЕНИЕ ★")
+        print("* ЛУЧШЕЕ ЦЕЛОЧИСЛЕННОЕ РЕШЕНИЕ *")
         print(f"{'='*60}")
         print(f"  x* = {bx}")
         print(f"  y* = {by}")
@@ -364,7 +334,7 @@ def visualize_megiddo_solution(filename=None):
         print(f"\n--- Все допустимые точки (сортировка по значению f) ---")
         sorted_valid = sorted(valid_points, key=lambda pt: pt[2], reverse=True)
         for i, (vx, vy, vval) in enumerate(sorted_valid):
-            marker = " ★" if (vx, vy, vval) == best_point else ""
+            marker = " *" if (vx, vy, vval) == best_point else ""
             print(f"  {i+1}. ({vx}, {vy}): f = {vval:.2f}{marker}")
     else:
         print(f"\n[!] Ни одна точка не попала в область допустимых решений!")
@@ -400,24 +370,24 @@ def visualize_megiddo_solution(filename=None):
     x_vals = np.linspace(x_min - 10, x_max + 10, 300)
     
     # ========================================================================
-    # СОЗДАЕМ ТРЕЙСЫ ДЛЯ ВСЕХ ТРЕХ РЕЖИМОВ
+    # СОЗДАЕМ ТРЕЙСЫ ДЛЯ ВСЕХ РЕЖИМОВ
     # ========================================================================
     
     # Режим 1: все прямые (активные синим) + решение
-    m1_lines = create_all_lines_mode1(constraints, active_indices, x_vals)
+    m1_lines = create_all_lines_mode1(constraints, active_indices, x_vals, y_min, y_max)
     m1_solution = create_solution_marker(x, y, val)
     
     # Режим 2: только активные прямые + решение + целочисленные (зеленые)
-    m2_lines = create_active_lines_mode2(constraints, active_indices, x_vals)
+    m2_lines = create_active_lines_mode2(constraints, active_indices, x_vals, y_min, y_max)
     m2_solution = create_solution_marker(x, y, val)
     m2_integer = create_integer_points(integer_points_x, integer_points_y, color='green', size=14)
     
     # Режим 3: все прямые (голубым) + целочисленные (красные)
-    m3_lines = create_all_lines_mode3(constraints, x_vals)
+    m3_lines = create_all_lines_mode3(constraints, x_vals, y_min, y_max)
     m3_integer = create_integer_points(integer_points_x, integer_points_y, color='red', size=16)
     
     # Режим 4: все прямые (голубым) + ЛУЧШЕЕ целочисленное решение (золотая звезда)
-    m4_lines = create_all_lines_mode3(constraints, x_vals)
+    m4_lines = create_all_lines_mode3(constraints, x_vals, y_min, y_max)
     m4_best = None
     if best_point_coords:
         bx, by = best_point_coords
@@ -547,11 +517,11 @@ def visualize_megiddo_solution(filename=None):
                         ]
                     ),
                     dict(
-                        label="Режим 4: ЛУЧШЕЕ решение (★ звезда)",
+                        label="Режим 4: ЛУЧШЕЕ решение (*)",
                         method="update",
                         args=[
                             {"visible": vis_mode4},
-                            {"title": f"Режим 4: Все неравенства + ЛУЧШЕЕ целочисленное решение (★ золотая звезда)<br>"
+                            {"title": f"Режим 4: Все неравенства + ЛУЧШЕЕ целочисленное решение (*) золотая звезда<br>"
                                       f"Всего: {n_constraints} | Лучшее: {best_point_coords if best_point_coords else 'N/A'}"}
                         ]
                     ),
